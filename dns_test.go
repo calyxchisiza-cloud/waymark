@@ -103,6 +103,24 @@ func TestRejectsBadName(t *testing.T) {
 	}
 }
 
+func TestPageAndList(t *testing.T) {
+	book := New()
+	if err := book.Set("payments.prod", []string{"127.0.0.1"}, time.Minute); err != nil {
+		t.Fatal(err)
+	}
+	h := Handler(book)
+	page := httptest.NewRecorder()
+	h.ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/", nil))
+	if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), "Hello") {
+		t.Fatalf("page %d", page.Code)
+	}
+	list := httptest.NewRecorder()
+	h.ServeHTTP(list, httptest.NewRequest(http.MethodGet, "/v1/names", nil))
+	if list.Code != http.StatusOK || !strings.Contains(list.Body.String(), "payments.prod") {
+		t.Fatalf("%d %s", list.Code, list.Body.String())
+	}
+}
+
 func encodeQuery(t *testing.T, name string, qtype uint16) []byte {
 	t.Helper()
 	buf := []byte{0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}

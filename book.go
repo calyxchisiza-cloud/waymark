@@ -2,6 +2,7 @@ package waymark
 
 import (
 	"net"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -125,6 +126,53 @@ func (b *Book) clock() time.Time {
 		return time.Now()
 	}
 	return b.now()
+}
+
+// NameView is one name and the addresses still inside their TTL.
+type NameView struct {
+	Name      string        `json:"name"`
+	Addresses []AddressView `json:"addresses"`
+}
+
+// AddressView is one live address.
+type AddressView struct {
+	Address string `json:"address"`
+	TTL     uint32 `json:"ttl"`
+}
+
+// List returns every name that still has a live address.
+func (b *Book) List() []NameView {
+	now := b.clock()
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	names := make([]string, 0, len(b.names))
+	for name := range b.names {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	out := []NameView{}
+	for _, name := range names {
+		var left []target
+		var addresses []AddressView
+		for _, item := range b.names[name] {
+			if !now.Before(item.expires) {
+				continue
+			}
+			sec := int(item.expires.Sub(now).Seconds())
+			if sec < 1 {
+				sec = 1
+			}
+			left = append(left, item)
+			addresses = append(addresses, AddressView{Address: item.ip.String(), TTL: uint32(sec)})
+		}
+		if len(left) == 0 {
+			delete(b.names, name)
+			continue
+		}
+		b.names[name] = left
+		out = append(out, NameView{Name: name, Addresses: addresses})
+	}
+	return out
 }
 
 // Answer is one IPv4 address and the TTL to send in the DNS reply.

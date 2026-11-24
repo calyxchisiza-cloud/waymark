@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Waymark</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --wash:#e7f0e4; --shell:#f6f7f3; --ink:#1f2920; --muted:#7d8a7c; --line:#e7eee4; --accent:#3f6b4a; --soft:#e5f3e4; --down:#d4534b; }
+    * { box-sizing:border-box; } body { margin:0; min-height:100vh; font-family:Inter,"Segoe UI",sans-serif; color:var(--ink); background:radial-gradient(900px 480px at 10% -10%, #fff, var(--wash)); }
+    .shell { width:min(1120px, calc(100% - 40px)); margin:28px auto; min-height:760px; display:grid; grid-template-columns:84px 1fr; background:var(--shell); border-radius:28px; box-shadow:0 24px 60px rgba(30,50,30,.08); }
+    .rail { padding:22px 0; display:flex; justify-content:center; }
+    .mark { width:44px; height:44px; border-radius:14px; background:var(--soft); color:var(--accent); display:grid; place-items:center; }
+    .content { padding:28px 28px 28px 6px; }
+    .top { display:flex; justify-content:space-between; align-items:center; }
+    h1 { margin:0; font-size:28px; letter-spacing:-.03em; } .sub { margin:4px 0 0; color:var(--muted); font-size:14px; }
+    .iconbtn { width:42px; height:42px; border:0; border-radius:50%; background:#fff; cursor:pointer; }
+    .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:16px; }
+    .stat, .panel { background:#fff; border-radius:18px; padding:16px 18px; }
+    .stat .k { color:var(--muted); font-size:13px; } .stat b { display:block; margin-top:10px; font-size:30px; }
+    h2 { margin:0 0 8px; font-size:16px; } label { display:block; margin:10px 0 4px; font-size:12px; color:var(--muted); }
+    input, button { font:inherit; } input { width:100%; border:1px solid var(--line); border-radius:12px; padding:10px 12px; }
+    .row { display:flex; gap:10px; align-items:end; } .row > * { flex:1; }
+    button.primary, button.quiet { border:0; border-radius:12px; padding:10px 14px; cursor:pointer; }
+    button.primary { background:var(--accent); color:#fff; } button.quiet { background:var(--soft); }
+    table { width:100%; border-collapse:collapse; } td { padding:10px 0; border-bottom:1px solid var(--line); }
+    .avatar { width:36px; height:36px; border-radius:50%; background:var(--soft); color:var(--accent); display:inline-grid; place-items:center; margin-right:8px; font-weight:700; }
+    .error { color:var(--down); }
+    @media (max-width:900px) { .shell { grid-template-columns:1fr; } .stats, .row { display:grid; grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="rail"><div class="mark" title="Waymark"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M12 8l2 4-4 .5z" fill="currentColor" stroke="none"/></svg></div></aside>
+    <main class="content">
+      <div class="top"><div><h1>Hello</h1><p class="sub">Names answer only while their TTL still has time left.</p></div><button class="iconbtn" id="refresh">↻</button></div>
+      <div class="stats">
+        <article class="stat"><div class="k">Names</div><b id="n-names">0</b></article>
+        <article class="stat"><div class="k">Addresses</div><b id="n-addrs">0</b></article>
+        <article class="stat"><div class="k">Shortest TTL</div><b id="n-ttl">–</b></article>
+      </div>
+      <section class="panel" style="margin-top:16px">
+        <h2>Register</h2>
+        <div class="row">
+          <div><label>Name</label><input id="name" value="payments.prod"></div>
+          <div><label>Addresses</label><input id="addresses" value="127.0.0.1"></div>
+          <div><label>TTL seconds</label><input id="ttl" value="60"></div>
+          <div><button class="primary" id="save">Save</button></div>
+        </div>
+        <p class="error" id="err"></p>
+      </section>
+      <section class="panel" style="margin-top:14px">
+        <h2>Directory</h2>
+        <table><tbody id="rows"></tbody></table>
+      </section>
+    </main>
+  </div>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    async function load() {
+      const rows = await (await fetch("/v1/names")).json();
+      let addrs = 0, shortest = null;
+      $("rows").innerHTML = rows.map((row) => {
+        addrs += row.addresses.length;
+        return row.addresses.map((item) => {
+          if (shortest === null || item.ttl < shortest) shortest = item.ttl;
+          return "<tr><td><span class='avatar'>" + row.name.slice(0,1).toUpperCase() + "</span><b>" + row.name + "</b></td><td>" + item.address + "</td><td>" + item.ttl + "s</td><td><button class='quiet drop' data-name='" + row.name + "' data-address='" + item.address + "'>Remove</button></td></tr>";
+        }).join("");
+      }).join("");
+      $("n-names").textContent = rows.length;
+      $("n-addrs").textContent = addrs;
+      $("n-ttl").textContent = shortest === null ? "–" : shortest + "s";
+      document.querySelectorAll(".drop").forEach((button) => button.onclick = async () => {
+        await fetch("/v1/names/" + button.dataset.name + "?address=" + encodeURIComponent(button.dataset.address), { method:"DELETE" });
+        load();
+      });
+    }
+    $("save").onclick = async () => {
+      $("err").textContent = "";
+      const response = await fetch("/v1/names/" + $("name").value, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ addresses:$("addresses").value.split(",").map((s) => s.trim()).filter(Boolean), ttl_seconds:Number($("ttl").value) }) });
+      if (!response.ok) { $("err").textContent = await response.text(); return; }
+      load();
+    };
+    $("refresh").onclick = load;
+    load();
+  </script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 package waymark
 
 import (
+	_ "embed"
 	"encoding/json"
 	"io"
 	"net"
@@ -8,9 +9,20 @@ import (
 	"time"
 )
 
-// Handler registers names on a book.
+//go:embed index.html
+var indexHTML []byte
+
+// Handler registers names on a book and serves the management page.
 func Handler(book *Book) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(indexHTML)
+	})
+	mux.HandleFunc("GET /v1/names", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(book.List())
+	})
 	mux.HandleFunc("POST /v1/names/{name}", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Addresses  []string `json:"addresses"`
